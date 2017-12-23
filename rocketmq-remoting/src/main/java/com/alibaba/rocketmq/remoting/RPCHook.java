@@ -19,7 +19,9 @@ package com.alibaba.rocketmq.remoting;
 
 import com.alibaba.rocketmq.remoting.protocol.RemotingCommand;
 
-
+/**
+ *
+ */
 public interface RPCHook {
     void doBeforeRequest(final String remoteAddr, final RemotingCommand request);
 

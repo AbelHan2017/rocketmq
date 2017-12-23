@@ -17,6 +17,9 @@
 
 package com.alibaba.rocketmq.remoting;
 
+/**
+ * 远程服务
+ */
 public interface RemotingService {
     void start();
 

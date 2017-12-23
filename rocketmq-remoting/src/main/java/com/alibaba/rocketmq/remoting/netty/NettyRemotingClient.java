@@ -81,15 +81,19 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig, //
                                final ChannelEventListener channelEventListener) {
+        //调用父类的构造函数, 主要是设置单向调用和异步调用两种模式下的最大并发数
         super(nettyClientConfig.getClientOnewaySemaphoreValue(), nettyClientConfig.getClientAsyncSemaphoreValue());
         this.nettyClientConfig = nettyClientConfig;
+        //NettyEventExecuter处理线程会不断从eventQueue中读取消息, 调用注册的ChannelEventListener进行处理
         this.channelEventListener = channelEventListener;
 
+        //执行用户回调函数的线程数
         int publicThreadNums = nettyClientConfig.getClientCallbackExecutorThreads();
         if (publicThreadNums <= 0) {
             publicThreadNums = 4;
         }
 
+        //执行用户回调函数的线程池
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -119,8 +123,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     @Override
     public void start() {
+        //构建一个DefaultEventExecutorGroup, 用于处理netty handler中的操作
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(//
-                nettyClientConfig.getClientWorkerThreads(), //
+                nettyClientConfig.getClientWorkerThreads(), //客户端工作线程数
                 new ThreadFactory() {
 
                     private AtomicInteger threadIndex = new AtomicInteger(0);
@@ -132,6 +137,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     }
                 });
 
+        //初始化netty, 对netty的用法不做介绍
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)//
                 //
                 .option(ChannelOption.TCP_NODELAY, true)
@@ -149,14 +155,18 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     public void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline().addLast(//
                                 defaultEventExecutorGroup, //
-                                new NettyEncoder(), //
-                                new NettyDecoder(), //
-                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()), //
-                                new NettyConnetManageHandler(), //
+                                new NettyEncoder(), //编码器
+                                new NettyDecoder(), //解码器
+                                //心跳检测
+                                new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
+                                //连接管理handler,处理connect, disconnect, close等事件
+                                new NettyConnetManageHandler(),
+                                //处理接收到RemotingCommand消息后的事件, 收到服务器端响应后的相关操作
                                 new NettyClientHandler());
                     }
                 });
 
+        //定时扫描responseTable,获取返回结果,并且处理超时
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
             @Override
@@ -332,13 +342,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
             throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
+        //根据addr获得channel
         final Channel channel = this.getAndCreateChannel(addr);
         if (channel != null && channel.isActive()) {
             try {
+                //RocketMQ允许用户定义rpc hook,可在发送请求前,或者接受响应后执行
                 if (this.rpcHook != null) {
                     this.rpcHook.doBeforeRequest(addr, request);
                 }
+                //将数据流转给抽象类NettyRemotingAbstract
                 RemotingCommand response = this.invokeSyncImpl(channel, request, timeoutMillis);
+                //rpc hook
                 if (this.rpcHook != null) {
                     this.rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(channel), request, response);
                 }

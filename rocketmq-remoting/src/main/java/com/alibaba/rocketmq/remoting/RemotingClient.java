@@ -29,7 +29,10 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * @author shijia.wxr
- *
+ *  RocketMQ支持三种方式的通信:
+ *  同步(sync)
+ *  异步(async)
+ *  单向(oneway)
  */
 public interface RemotingClient extends RemotingService {
 
