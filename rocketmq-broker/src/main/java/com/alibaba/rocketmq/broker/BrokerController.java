@@ -165,11 +165,15 @@ public class BrokerController {
     public boolean initialize() throws CloneNotSupportedException {
         boolean result = true;
 
+        //加载topicConfigManager
         result = result && this.topicConfigManager.load();
 
+        //加载consumerOffsetManager
         result = result && this.consumerOffsetManager.load();
+        //加载subscriptionGroupManager
         result = result && this.subscriptionGroupManager.load();
 
+        //加载messageStore
         if (result) {
             try {
                 this.messageStore =
@@ -187,6 +191,14 @@ public class BrokerController {
 
         result = result && this.messageStore.load();
 
+        /**
+         * 3.当上述的管理器全部加载完成以后, 控制器将开始进入下一步的初始化：
+
+         启动netty服务端, 包括处理消息的remotingServer和主从同步使用的fastRemotingServer.
+         初始化多个线程池, 包括：sendMessageExecutor(处理发送消息), pullMessageExecutor(处理拉取消息), adminBrokerExecutor(管理Broker), clientManageExecutor(管理client), consumerManageExecutor(管理消费者)
+         将上述的线程池注册到netty消息处理器当中
+         启动定时调度线程来做很多事情, 包括：一天上报一次broker的所有状态, 10秒持久化一次Consumer消费进度, 60分钟清理一次无效的topic订阅信息, 60秒获取一次namesrv的地址信息
+         */
         if (result) {
             this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.clientHousekeepingService);
             NettyServerConfig fastConfig = (NettyServerConfig) this.nettyServerConfig.clone();
@@ -249,6 +261,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
+                        //清理出问题的consumer
                         BrokerController.this.protectBroker();
                     } catch (Exception e) {
                         log.error("protectBroker error.", e);
@@ -260,6 +273,7 @@ public class BrokerController {
                 @Override
                 public void run() {
                     try {
+                        //打印生产, 消费队列信息
                         BrokerController.this.printWaterMark();
                     } catch (Exception e) {
                         log.error("printWaterMark error.", e);
@@ -279,6 +293,7 @@ public class BrokerController {
                 }
             }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
 
+            //更新namesrv的地址信息
             if (this.brokerConfig.getNamesrvAddr() != null) {
                 this.brokerOuterAPI.updateNameServerAddressList(this.brokerConfig.getNamesrvAddr());
             } else if (this.brokerConfig.isFetchNamesrvAddrByAddressServer()) {
@@ -295,6 +310,7 @@ public class BrokerController {
                 }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
             }
 
+            //slave更新master地址, 从master同步消息数据
             if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
                 if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
                     this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());
@@ -315,6 +331,7 @@ public class BrokerController {
                     }
                 }, 1000 * 10, 1000 * 60, TimeUnit.MILLISECONDS);
             } else {
+                //master打印slave落后的信息
                 this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                     @Override
@@ -572,6 +589,11 @@ public class BrokerController {
         return addr;
     }
 
+    /**
+     * 启动刚刚初始化的各个管理器：topicManager, consumerOffsetManager, subscriptionGroupManager, messageStore
+     * 开启定时调度线程30秒向namesrv不断上报自己的信息
+     * @throws Exception
+     */
     public void start() throws Exception {
         if (this.messageStore != null) {
             this.messageStore.start();
@@ -608,6 +630,7 @@ public class BrokerController {
             @Override
             public void run() {
                 try {
+                    //向nameserver上报信息
                     BrokerController.this.registerBrokerAll(true, false);
                 } catch (Throwable e) {
                     log.error("registerBrokerAll Exception", e);

@@ -46,6 +46,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author shijia.wxr
+ * broker是消息队列的核心组建,承载了消息接收,存储和转发的职责. 因此, broker需要具备各种基本功能和高阶功能.
+ * 1.基本功能
+    承载消息堆积的能力：
+        消息到达服务端如果不经过任何处理就到接收者了, broker就失去了它的意义. 为了满足我们错峰/流控/最终可达等一系列需求, 把消息存储下来, 然后选择时机投递就显得是顺理成章的了. 因此, broker必须具备强大的消息堆积能力.
+    消费关系解偶：
+        其实就是具备单播(点对点)和广播(一点对多点)功能.
+ * 2.高阶功能
+    消息去重：
+        当前的消息队列还无法做到消息完全去重(除非允许消息丢失), 只能尽量减少消息重复的概率.
+    顺序消息
+        消息有序指的是一类消息消费时, 能按照发送的顺序来消费. 例如: 一个订单产生了3条消息, 分别是订单创建, 订单付款, 订单完成. 消费时, 要按照这个顺序消费才能有意义. 但是同时订单之间是可以并行消费的. RocketMQ可以严格的保证消息有序.
+ *
  */
 public class BrokerStartup {
     public static Properties properties = null;
@@ -81,6 +93,16 @@ public class BrokerStartup {
         return null;
     }
 
+    /**
+     * 1.当broker启动命令得到外部传入的初始化参数以后, 将参数注入对应的config类当中, 这些config类包括:
+
+     broker自身的配置：包括根目录, namesrv地址, broker的IP和名称, 消息队列数, 收发消息线程池数等参数
+     netty启动配置：包括netty监听端口, 工作线程数, 异步发送消息信号量数量等网络配置等参数.
+     存储层配置：包括存储跟目录, CommitLog配置, 持久化策略配置等参数.
+     这一步骤的具体代码在BrokerStartup的start方法和createBrokerController方法中
+     * @param args
+     * @return
+     */
     public static BrokerController createBrokerController(String[] args) {
         System.setProperty(RemotingCommand.RemotingVersionKey, Integer.toString(MQVersion.CurrentVersion));
 
