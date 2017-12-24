@@ -133,6 +133,9 @@ public class MQClientInstance {
                 MQVersion.getVersionDesc(MQVersion.CurrentVersion), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /*
+    mQClientFactory.start()方法会启动一些列task, 其中一个task会去定时拉取broker信息和topic路由信息.
+     */
     public void start() throws MQClientException {
 
         synchronized (this) {
@@ -144,6 +147,7 @@ public class MQClientInstance {
                         this.clientConfig.setNamesrvAddr(this.mQClientAPIImpl.fetchNameServerAddr());
                     }
                     // Start request-response channel
+                    //remoting Service start(netty)
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
                     this.startScheduledTask();
